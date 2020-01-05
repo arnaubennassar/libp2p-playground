@@ -29,12 +29,35 @@ func main() {
 		panic(err)
 	}
 
-	// listen to other peers
+	// listen to ping
 	p.SetStreamHandler("/ping", func(s network.Stream) {
 		fmt.Println("________________________________________")
-		fmt.Println("Ping!")
+		fmt.Println("\x1b[32mPing!\x1b[0m")
 		printStreamInfo(s)
 		fmt.Println("________________________________________")
+		if !config.noInteractive {
+			fmt.Println("Enter command:")
+		}
+		s.Close()
+	})
+
+	// listen to messages
+	p.SetStreamHandler("/msg", func(s network.Stream) {
+		fmt.Println("________________________________________")
+		fmt.Println("Message received:")
+		buf := bufio.NewReader(s)
+		str, err := buf.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading from buffer", err)
+		}
+		if str != "\n" {
+			fmt.Printf("\x1b[32m%s\x1b[0m", str)
+		}
+		printStreamInfo(s)
+		fmt.Println("________________________________________")
+		if !config.noInteractive {
+			fmt.Println("Enter command:")
+		}
 		s.Close()
 	})
 
@@ -82,6 +105,8 @@ func main() {
 			printPeerList()
 		case "ping":
 			ping(cmd)
+		case "send":
+			send(cmd)
 		case "quit":
 			return
 		default:
@@ -95,7 +120,7 @@ func printHelp() {
 	fmt.Println("APP FLAGS (passed when starting the app):")
 	fmt.Println("\n-listen\t\t\tList of addrs the peer will listen to, quoted (\"\") and separated by space. Useful if behind proxy, DNS, portforwarding, ...")
 	fmt.Println("-relay\t\t\tShould this peer relay connections to other peers? Useful if you want this peer to act as a gateway. If not passed NO is assumed")
-	fmt.Println("-no_interactive\t\t\tRun without user intervention. For ping and relay purposes")
+	fmt.Println("-no-interactive\t\t\tRun without user intervention. For ping and relay purposes")
 	fmt.Println("\nAPP USAGE (once the app is running):")
 	fmt.Println("\nhelp\t\t\t Prints this message.")
 	fmt.Println("whoami\t\t\t Prints info about this peer (ID, addr).")
@@ -103,11 +128,12 @@ func printHelp() {
 	fmt.Println("add [peer ID] [addr]\t Adds a peer with the given ID and addr.")
 	fmt.Println("ls\t\t\t Print list of connected peers.")
 	fmt.Println("ping [peer ID] \t\t Send a ping to peer ID.")
+	fmt.Println("ping [peer ID] [message] \t Send a message to peer ID.")
 	fmt.Println("quit\t\t\t Stop app.")
 }
 
 func printWhoami() {
-	fmt.Println("I'm the peer:", p.ID().Pretty())
+	fmt.Println("I'm the peer:", p.ID().Pretty(), "(", peer.IDHexEncode(p.ID()), ")")
 }
 
 func printAddme() {
@@ -143,9 +169,34 @@ func ping(args []string) {
 		fmt.Println("Error stablishing connection: ", err)
 		return
 	}
-	fmt.Println("Pong!")
+	fmt.Println("\x1b[32mPong!\x1b[0m")
 	printStreamInfo(s)
 	s.Read(make([]byte, 1))
+}
+
+func send(args []string) {
+	s, err := p.NewStream(context.Background(), parseID(args[1]), "/msg")
+	if err != nil {
+		fmt.Println("Error stablishing connection: ", err)
+		return
+	}
+	buf := bufio.NewWriter(s)
+	msg := args[2]
+	for i := 3; i < len(args); i++ {
+		msg += " " + args[i]
+	}
+	_, err = buf.WriteString(fmt.Sprintf("%s\n", msg))
+	if err != nil {
+		fmt.Println("Error writing to buffer")
+	}
+	fmt.Println("Message sent")
+	err = buf.Flush()
+	if err != nil {
+		fmt.Println("Error flushing buffer")
+	}
+	// wait for the peer to close the stream
+	s.Read(make([]byte, 1))
+	fmt.Println("Message received by the other peer")
 }
 
 // TODO: import / export

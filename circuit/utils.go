@@ -88,5 +88,6 @@ func parsePeerInfo(ID, addr string) peer.AddrInfo {
 
 func printStreamInfo(s network.Stream) {
 	fmt.Println("Message comes through:", s.Conn().RemoteMultiaddr())
-	fmt.Println("By: ", s.Conn().RemotePeer())
+	fmt.Println("By: ", s.Conn().RemotePeer(),
+	"(", peer.IDHexEncode(s.Conn().RemotePeer()), ")")
 }
